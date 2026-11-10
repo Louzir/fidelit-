@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#2a1b2e">
+<title>Carte privilège</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--a:#d9a3b5;--b1:#2a1b2e;--b2:#6b3f5e;--bg:#f6eff0;--ln:#e6d6da}
+*{box-sizing:border-box}
+body{margin:0;font:15px Jost,system-ui,sans-serif;background:var(--bg);color:#2a1b2e;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.serif{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+.card{max-width:380px;margin:28px auto;border-radius:22px;padding:24px;color:#fff;background:linear-gradient(135deg,var(--b1),var(--b2));box-shadow:0 18px 40px #0004;position:relative;overflow:hidden}
+.card:after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 40%,#fff3 50%,transparent 60%);transform:translateX(-100%);animation:sh 1.6s .3s 1 forwards}
+@keyframes sh{to{transform:translateX(100%)}}@media(prefers-reduced-motion:reduce){.card:after{animation:none}}
+.dots{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.dots i{aspect-ratio:1;border-radius:50%;border:1.5px solid #fff5;display:grid;place-items:center;font-style:normal;color:transparent;font-size:16px}
+.dots i.on{background:var(--a);border-color:var(--a);color:var(--b1)}
+.rw{background:#fff2;border-radius:12px;padding:10px 12px;margin:10px 0}
+.qr{background:#fff;padding:10px;border-radius:12px;width:max-content;margin:14px auto 8px}
+nav{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px}
+button,input,select{font:inherit;border-radius:10px;border:1px solid var(--ln);padding:10px 12px;background:#fff;color:inherit}
+button{cursor:pointer}button.p{background:var(--b1);color:#fff;border-color:var(--b1)}button.on{background:var(--a);border-color:var(--a)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.box{background:#fff;border:1px solid var(--ln);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>input{flex:1;min-width:120px}
+.li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
+.f{display:grid;gap:4px;margin-bottom:10px}.f label{font-size:13px;opacity:.7}
+table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;border-bottom:1px solid var(--ln)}
+#msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a1b2e;color:#fff;padding:10px 16px;border-radius:12px;display:none}
+</style></head><body>
+<div id="app"></div><div id="msg" role="status"></div>
+<script>
+const API='https://script.google.com/macros/s/AKfycbzd3vdAAnlGCk0s5-9kVnMyoIV7evWFKAPA_bzfoH9hYnnVgA-_bPfqW97iTNMOkcofvQ/exec'; // URL du déploiement Web App (…/exec)
+const $=s=>document.querySelector(s),app=$('#app');
+let G,PIN=sessionStorage.pin||'',scn;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fd=d=>d?new Date(d).toLocaleDateString('fr-FR'):'';
+const toast=t=>{const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',2600)};
+async function call(o){const r=await fetch(API,{method:'POST',body:JSON.stringify({pin:PIN,...o})});const j=await r.json();if(j.error)throw j.error;if(j.g)theme(j.g);return j}
+function theme(g){G=g;const s=document.documentElement.style;s.setProperty('--a',g.accent);s.setProperty('--b1',g.bg1);s.setProperty('--b2',g.bg2)}
+function cardHTML(c,g){let s='';for(let i=0;i<g.need;i++)s+=`<i class="${i<c.stamps?'on':''}">${esc(g.icon)}</i>`;
+return `<div class="card"><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7;margin-bottom:18px">${esc(g.cardTitle)}</div><div class="dots">${s}</div>
+<p>${Math.min(c.stamps,g.need)} / ${g.need}</p>${c.reward?`<div class="rw">🎁 ${esc(g.reward)}<br><small>Valable jusqu'au ${fd(c.exp)}</small></div>`:''}
+<div class="qr" id="qr"></div><div style="text-align:center;opacity:.85">${esc(c.name)} · ${c.id}</div></div>`}
+function qr(id){new QRCode($('#qr'),{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
+
+/* ---------- Vue client ---------- */
+async function showCard(id){
+  const draw=async()=>{try{const j=await call({a:'card',id});theme(j.g);app.innerHTML=cardHTML(j.c,j.g);qr(j.c.id)}
+    catch(e){app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
+  await draw();setInterval(draw,30000);
+}
+
+/* ---------- Dashboard ---------- */
+async function admin(){
+  if(!PIN)return login();
+  try{await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
+  app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}</h1>
+  <nav>${[['scan','Scanner'],['cl','Clients'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav><div id="tab"></div></div>`;
+  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));tab('scan');
+}
+function login(err){
+  app.innerHTML=`<div class="wrap" style="max-width:360px;margin-top:20vh"><h1 class="serif">Espace boutique</h1>
+  <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="Code PIN"><button class="p" id="go">Entrer</button></div>${err?`<p>${esc(err)}</p>`:''}</div>`;
+  $('#go').onclick=()=>{PIN=$('#pin').value;sessionStorage.pin=PIN;admin()};
+}
+function tab(k){
+  if(scn){scn.stop().catch(()=>{});scn=null}
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==k));
+  ({scan:tScan,cl:tCl,hi:tHi,cf:tCf})[k]();
+}
+function tScan(){
+  $('#tab').innerHTML=`<div class="box"><div id="rd"></div><div class="row" style="margin-top:8px"><input id="mid" placeholder="ou saisir le code (ex: A1B2C3)"><button id="fnd">Chercher</button></div></div><div id="res"></div>`;
+  $('#fnd').onclick=()=>found($('#mid').value.trim());
+  scn=new Html5Qrcode('rd');scn.start({facingMode:'environment'},{fps:10,qrbox:200},t=>{scn.stop().catch(()=>{});scn=null;found(t)}).catch(()=>{$('#rd').textContent='Caméra indisponible : saisissez le code.'});
+}
+async function found(id,c){
+  try{if(!c)c=(await call({a:'card',id})).c;
+    $('#res').innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small>
+    <p>${c.stamps} / ${G.need} tampons ${c.reward?'· 🎁 récompense disponible (jusqu\'au '+fd(c.exp)+')':''}</p>
+    <div class="row"><input id="qty" type="number" min="1" value="1" style="max-width:80px"><button class="p" id="st">Ajouter tampon(s)</button>${c.reward?'<button id="rd2">Valider la récompense</button>':''}</div></div>`;
+    const act=async a=>{try{const j=await call({a,id:c.id,n:$('#qty').value});toast(j.msg);found(c.id,j.c)}catch(e){toast(e)}};
+    $('#st').onclick=()=>act('stamp');if(c.reward)$('#rd2').onclick=()=>act('redeem');
+  }catch(e){toast(e)}
+}
+async function tCl(){
+  $('#tab').innerHTML=`<div class="box"><div class="row"><input id="nm" placeholder="Nom"><input id="tl" placeholder="Téléphone" inputmode="tel"><button class="p" id="ad">Créer la carte</button></div></div>
+  <input id="q" placeholder="Rechercher…" style="width:100%;margin-bottom:10px"><div class="box" id="ls">Chargement…</div>`;
+  const {list}=await call({a:'list'});
+  const draw=()=>{const q=$('#q').value.toLowerCase();
+    $('#ls').innerHTML=list.filter(c=>(c.name+c.tel+c.id).toLowerCase().includes(q)).map(c=>`<div class="li"><div><b>${esc(c.name)}</b><br><small>${c.id} · ${c.stamps}/${G.need}${c.reward?' · 🎁':''}</small></div>
+    <div class="row"><button data-l="${c.id}">Lien</button><button data-w="${c.id}">WhatsApp</button></div></div>`).join('')||'Aucun client.';
+    document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(link(b.dataset.l));toast('Lien copié')});
+    document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.id==b.dataset.w);let t=String(c.tel).replace(/\D/g,'');if(t.length==8)t='216'+t;
+      open(`https://wa.me/${t}?text=${encodeURIComponent('Bonjour '+c.name+', voici votre carte '+G.cardTitle+' : '+link(c.id))}`)})};
+  $('#q').oninput=draw;draw();
+  $('#ad').onclick=async()=>{const name=$('#nm').value.trim();if(!name)return toast('Nom requis');await call({a:'add',name,tel:$('#tl').value});toast('Carte créée');tCl()};
+}
+const link=id=>location.origin+location.pathname+'?c='+id;
+async function tHi(){
+  $('#tab').innerHTML='<div class="box" id="hh">Chargement…</div>';
+  const {h}=await call({a:'hist'});
+  $('#hh').innerHTML=`<table>${h.map(r=>`<tr><td>${new Date(r.d).toLocaleString('fr-FR')}</td><td>${esc(r.n)}</td><td>${esc(r.a)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table>`;
+}
+function tCf(){
+  const F=[['shop','Nom de la boutique'],['cardTitle','Titre de la carte'],['need','Tampons pour une récompense','number'],['reward','Récompense'],['validDays','Validité de la récompense (jours)','number'],
+  ['mode','Après utilisation','select'],['icon','Icône du tampon'],['accent','Couleur d\'accent','color'],['bg1','Fond de carte (début)','color'],['bg2','Fond de carte (fin)','color'],['pin','Nouveau PIN (laisser vide = inchangé)','password']];
+  $('#tab').innerHTML=`<div class="box">${F.map(([k,l,t])=>`<div class="f"><label>${l}</label>${t=='select'?`<select id="c_${k}"><option value="carry">Garder l'excédent de tampons</option><option value="zero">Remettre à zéro</option></select>`:`<input id="c_${k}" type="${t||'text'}" value="${k=='pin'?'':esc(G[k])}">`}</div>`).join('')}<button class="p" id="sv">Enregistrer</button></div>`;
+  $('#c_mode').value=G.mode;
+  $('#sv').onclick=async()=>{const c={};F.forEach(([k,,t])=>{let v=$('#c_'+k).value;if(t=='number')v=+v;if(k=='pin'&&!v)return;c[k]=v});
+    await call({a:'save',cfg:c});if(c.pin){PIN=c.pin;sessionStorage.pin=PIN}toast('Réglages enregistrés')};
+}
+
+/* ---------- Routage ---------- */
+const cid=new URLSearchParams(location.search).get('c');
+cid?showCard(cid):admin();
+</script></body></html>
