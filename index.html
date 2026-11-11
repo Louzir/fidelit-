@@ -21,7 +21,7 @@ body{margin:0;font:15px Jost,system-ui,sans-serif;background:var(--bg);color:#2a
 .rw{background:#fff2;border-radius:12px;padding:10px 12px;margin:10px 0}
 .qr{background:#fff;padding:10px;border-radius:12px;width:max-content;margin:14px auto 8px}
 nav{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px}
-button,input,select{font:inherit;border-radius:10px;border:1px solid var(--ln);padding:10px 12px;background:#fff;color:inherit}
+button,input,select,textarea{font:inherit;border-radius:10px;border:1px solid var(--ln);padding:10px 12px;background:#fff;color:inherit}
 button{cursor:pointer}button.p{background:var(--b1);color:#fff;border-color:var(--b1)}button.on{background:var(--a);border-color:var(--a)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
 .box{background:#fff;border:1px solid var(--ln);border-radius:14px;padding:14px;margin-bottom:12px}
@@ -29,6 +29,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--a);outline-offs
 .li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
 .f{display:grid;gap:4px;margin-bottom:10px}.f label{font-size:13px;opacity:.7}
 table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;border-bottom:1px solid var(--ln)}
+textarea{width:100%}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:18px}.hd img{width:46px;height:46px;border-radius:12px;object-fit:cover}.hd.tp{flex-direction:column;text-align:center}.hd.tp img{width:64px;height:64px}
+.ft{max-width:380px;margin:0 auto 12px;text-align:center;font-size:14px;padding:0 12px}.ft a{color:inherit}.lk{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.lk a{border:1px solid var(--ln);border-radius:20px;padding:6px 12px;text-decoration:none;background:#fff}
+.ft details p{white-space:pre-line;text-align:left;background:#fff;border-radius:12px;padding:10px}.ft summary{cursor:pointer}
+.stg{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}.stg .box{margin:0}
+.bars{display:flex;gap:4px;align-items:flex-end;height:120px;margin-top:10px}.bars div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}.bars span{width:100%;background:var(--a);border-radius:4px 4px 0 0;min-height:2px}.bars small{font-size:10px}
 #msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a1b2e;color:#fff;padding:10px 16px;border-radius:12px;display:none}
 </style></head><body>
 <div id="app"></div><div id="msg" role="status"></div>
@@ -42,14 +48,14 @@ const toast=t=>{const m=$('#msg');m.textContent=t;m.style.display='block';setTim
 async function call(o){const r=await fetch(API,{method:'POST',body:JSON.stringify({pin:PIN,...o})});const j=await r.json();if(j.error)throw j.error;if(j.g)theme(j.g);return j}
 function theme(g){G=g;const s=document.documentElement.style;s.setProperty('--a',g.accent);s.setProperty('--b1',g.bg1);s.setProperty('--b2',g.bg2)}
 function cardHTML(c,g){let s='';for(let i=0;i<g.need;i++)s+=`<i class="${i<c.stamps?'on':''}">${esc(g.icon)}</i>`;
-return `<div class="card"><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7;margin-bottom:18px">${esc(g.cardTitle)}</div><div class="dots">${s}</div>
+return `<div class="card"><div class="hd ${g.logoPos=='top'?'tp':''}">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7">${esc(g.cardTitle)}</div></div></div><div class="dots">${s}</div>
 <p>${Math.min(c.stamps,g.need)} / ${g.need}</p>${c.reward?`<div class="rw">🎁 ${esc(g.reward)}<br><small>Valable jusqu'au ${fd(c.exp)}</small></div>`:''}
 <div class="qr" id="qr"></div><div style="text-align:center;opacity:.85">${esc(c.name)} · ${c.id}</div></div>`}
 function qr(id){new QRCode($('#qr'),{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
 
 /* ---------- Vue client ---------- */
 async function showCard(id){
-  const draw=async()=>{try{const j=await call({a:'card',id});theme(j.g);app.innerHTML=cardHTML(j.c,j.g);qr(j.c.id)}
+  const draw=async()=>{try{const j=await call({a:'card',id});theme(j.g);app.innerHTML=cardHTML(j.c,j.g)+footHTML(j.g)+`<p style="text-align:center;font-size:13px;opacity:.7;padding:0 24px">Pour l'avoir sur votre écran d'accueil — iPhone : Partager puis « Sur l'écran d'accueil ». Android : menu ⋮ puis « Installer l'application ».</p>`;qr(j.c.id);pwa(j.g)}
     catch(e){app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
   await draw();setInterval(draw,30000);
 }
@@ -59,7 +65,7 @@ async function admin(){
   if(!PIN)return login();
   try{await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
   app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}</h1>
-  <nav>${[['scan','Scanner'],['cl','Clients'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav><div id="tab"></div></div>`;
+  <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav><div id="tab"></div></div>`;
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));tab('scan');
 }
 function login(err){
@@ -70,7 +76,7 @@ function login(err){
 function tab(k){
   if(scn){scn.stop().catch(()=>{});scn=null}
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==k));
-  ({scan:tScan,cl:tCl,hi:tHi,cf:tCf})[k]();
+  ({scan:tScan,cl:tCl,st:tSt,hi:tHi,cf:tCf})[k]();
 }
 function tScan(){
   $('#tab').innerHTML=`<div class="box"><div id="rd"></div><div class="row" style="margin-top:8px"><input id="mid" placeholder="ou saisir le code (ex: A1B2C3)"><button id="fnd">Chercher</button></div></div><div id="res"></div>`;
@@ -79,41 +85,93 @@ function tScan(){
 }
 async function found(id,c){
   try{if(!c)c=(await call({a:'card',id})).c;
-    $('#res').innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small>
+    $('#res').innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small><br><small>${esc(c.tel||'')}${c.since?' · client depuis le '+fd(c.since):''}</small>
     <p>${c.stamps} / ${G.need} tampons ${c.reward?'· 🎁 récompense disponible (jusqu\'au '+fd(c.exp)+')':''}</p>
     <div class="row"><input id="qty" type="number" min="1" value="1" style="max-width:80px"><button class="p" id="st">Ajouter tampon(s)</button>${c.reward?'<button id="rd2">Valider la récompense</button>':''}</div></div>`;
-    const act=async a=>{try{const j=await call({a,id:c.id,n:$('#qty').value});toast(j.msg);found(c.id,j.c)}catch(e){toast(e)}};
+    const act=async a=>{try{const j=await call({a,id:c.id,n:$('#qty').value});toast(j.msg);found(c.id,j.c);if($('#bk'))hist(c.id)}catch(e){toast(e)}};
     $('#st').onclick=()=>act('stamp');if(c.reward)$('#rd2').onclick=()=>act('redeem');
+    if($('#bk')){$('#res').insertAdjacentHTML('beforeend',`<div class="box row"><input id="en" value="${esc(c.name)}"><input id="et" value="${esc(c.tel)}"><button id="es">Modifier</button><button id="ed">Supprimer</button></div>`);
+      $('#es').onclick=async()=>{try{await call({a:'edit',id:c.id,name:$('#en').value.trim(),tel:$('#et').value.trim()});toast('Client modifié');tClient(c.id)}catch(e){toast(e)}};
+      $('#ed').onclick=async()=>{if(confirm('Supprimer ce client et sa carte ?')){try{await call({a:'del',id:c.id});toast('Client supprimé');tCl()}catch(e){toast(e)}}}}
   }catch(e){toast(e)}
 }
 async function tCl(){
-  $('#tab').innerHTML=`<div class="box"><div class="row"><input id="nm" placeholder="Nom"><input id="tl" placeholder="Téléphone" inputmode="tel"><button class="p" id="ad">Créer la carte</button></div></div>
+  $('#tab').innerHTML=`<div class="box"><div class="row"><input id="nm" placeholder="Nom"><input id="tl" placeholder="Téléphone" inputmode="tel"><button class="p" id="ad">Créer la carte</button></div><button id="ex" style="margin-top:8px">Exporter les clients (CSV)</button></div>
   <input id="q" placeholder="Rechercher…" style="width:100%;margin-bottom:10px"><div class="box" id="ls">Chargement…</div>`;
   const {list}=await call({a:'list'});
   const draw=()=>{const q=$('#q').value.toLowerCase();
-    $('#ls').innerHTML=list.filter(c=>(c.name+c.tel+c.id).toLowerCase().includes(q)).map(c=>`<div class="li"><div><b>${esc(c.name)}</b><br><small>${c.id} · ${c.stamps}/${G.need}${c.reward?' · 🎁':''}</small></div>
+    $('#ls').innerHTML=list.filter(c=>(c.name+c.tel+c.id).toLowerCase().includes(q)).map(c=>`<div class="li"><div><b><a href="#" data-d="${c.id}" style="color:inherit">${esc(c.name)}</a></b><br><small>${c.id} · ${c.stamps}/${G.need}${c.reward?' · 🎁':''}</small></div>
     <div class="row"><button data-l="${c.id}">Lien</button><button data-w="${c.id}">WhatsApp</button></div></div>`).join('')||'Aucun client.';
+    document.querySelectorAll('[data-d]').forEach(b=>b.onclick=e=>{e.preventDefault();tClient(b.dataset.d)});
     document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(link(b.dataset.l));toast('Lien copié')});
     document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.id==b.dataset.w);let t=String(c.tel).replace(/\D/g,'');if(t.length==8)t='216'+t;
       open(`https://wa.me/${t}?text=${encodeURIComponent('Bonjour '+c.name+', voici votre carte '+G.cardTitle+' : '+link(c.id))}`)})};
   $('#q').oninput=draw;draw();
+  $('#ex').onclick=()=>csv('clients.csv',[['id','nom','tel','tampons','recompense','depuis','dernier passage'],...list.map(c=>[c.id,c.name,c.tel,c.stamps,c.reward?'oui':'non',fd(c.since),fd(c.last)])]);
   $('#ad').onclick=async()=>{const name=$('#nm').value.trim();if(!name)return toast('Nom requis');await call({a:'add',name,tel:$('#tl').value});toast('Carte créée');tCl()};
 }
 const link=id=>location.origin+location.pathname+'?c='+id;
-async function tHi(){
-  $('#tab').innerHTML='<div class="box" id="hh">Chargement…</div>';
-  const {h}=await call({a:'hist'});
-  $('#hh').innerHTML=`<table>${h.map(r=>`<tr><td>${new Date(r.d).toLocaleString('fr-FR')}</td><td>${esc(r.n)}</td><td>${esc(r.a)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table>`;
+const hT=(h,n)=>h.length?`<table>${h.map(r=>`<tr><td>${new Date(r.d).toLocaleString('fr-FR')}</td>${n?`<td>${esc(r.n)}</td>`:''}<td>${esc(r.a)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table>`:'Aucun mouvement.';
+async function tHi(id=''){
+  $('#tab').innerHTML=`<div class="box row"><select id="hc"><option value="">Tous les clients</option></select><select id="ha"><option value="">Toutes les actions</option><option>tampon</option><option>récompense</option><option>création</option><option>modification</option></select><button id="hx">Exporter CSV</button></div><div class="box" id="hh">Chargement…</div>`;
+  const [{list},{h}]=await Promise.all([call({a:'list'}),call({a:'hist',id})]);
+  $('#hc').innerHTML+=list.map(c=>`<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('');$('#hc').value=id;
+  let cur=h;const draw=()=>{const a=$('#ha').value;cur=h.filter(r=>!a||String(r.a).includes(a));$('#hh').innerHTML=hT(cur,!id)};
+  $('#hx').onclick=()=>csv('historique.csv',[['date','id','client','action','détail'],...cur.map(r=>[new Date(r.d).toLocaleString('fr-FR'),r.id,r.n,r.a,r.t])]);
+  $('#hc').onchange=e=>tHi(e.target.value);$('#ha').onchange=draw;draw();
 }
+function tClient(id){
+  $('#tab').innerHTML=`<button id="bk">← Clients</button><div id="res" style="margin-top:10px"></div><div class="box" id="hh">Chargement…</div>`;
+  $('#bk').onclick=tCl;found(id);hist(id);
+}
+async function hist(id){const {h}=await call({a:'hist',id});$('#hh').innerHTML='<b class="serif" style="font-size:20px">Historique</b>'+hT(h,false)}
+const THEMES=[['Prune rosé','#d9a3b5','#2a1b2e','#6b3f5e'],['Nuit & or','#d4af6a','#14161f','#2b2f45'],['Bordeaux','#e8b4a0','#3b0f1c','#7a2335'],['Émeraude','#bfe3cf','#0f2a24','#25594c'],['Bleu nuit','#a9c4f5','#0e1b3d','#2f4a8a'],['Blush','#7a3b4e','#f3d6d9','#d99aa8']];
+const FT=[['link','Linktree (lien)'],['fb','Facebook (lien ou nom)'],['ig','Instagram (@nom ou lien)'],['tel','Téléphone'],['addr','Adresse'],['rules','Règlement']];
+let lg='';
 function tCf(){
+  lg=G.logo||'';const ft=G.foot||{};
   const F=[['shop','Nom de la boutique'],['cardTitle','Titre de la carte'],['need','Tampons pour une récompense','number'],['reward','Récompense'],['validDays','Validité de la récompense (jours)','number'],
-  ['mode','Après utilisation','select'],['icon','Icône du tampon'],['accent','Couleur d\'accent','color'],['bg1','Fond de carte (début)','color'],['bg2','Fond de carte (fin)','color'],['pin','Nouveau PIN (laisser vide = inchangé)','password']];
-  $('#tab').innerHTML=`<div class="box">${F.map(([k,l,t])=>`<div class="f"><label>${l}</label>${t=='select'?`<select id="c_${k}"><option value="carry">Garder l'excédent de tampons</option><option value="zero">Remettre à zéro</option></select>`:`<input id="c_${k}" type="${t||'text'}" value="${k=='pin'?'':esc(G[k])}">`}</div>`).join('')}<button class="p" id="sv">Enregistrer</button></div>`;
-  $('#c_mode').value=G.mode;
+  ['mode','Après utilisation','select'],['icon','Icône du tampon'],['accent','Couleur d\'accent','color'],['bg1','Fond de carte (début)','color'],['bg2','Fond de carte (fin)','color'],['pin','Nouveau PIN (vide = inchangé)','password']];
+  $('#tab').innerHTML=`<div class="box"><b>Thèmes prêts</b><div class="row" style="margin:8px 0 14px">${THEMES.map((t,i)=>`<button data-th="${i}" style="background:linear-gradient(135deg,${t[2]},${t[3]});color:${t[1]};border:0">${t[0]}</button>`).join('')}</div>
+  ${F.map(([k,l,t])=>`<div class="f"><label>${l}</label>${t=='select'?`<select id="c_${k}"><option value="carry">Garder l'excédent de tampons</option><option value="zero">Remettre à zéro</option></select>`:`<input id="c_${k}" type="${t||'text'}" value="${k=='pin'?'':esc(G[k])}">`}</div>`).join('')}</div>
+  <div class="box"><b>Logo</b><div class="row" style="margin:8px 0"><input id="lgf" type="file" accept="image/*"><button id="lgx">Retirer</button></div><div id="lgp"></div>
+  <div class="f"><label>Position sur la carte</label><select id="c_logoPos"><option value="left">À côté du nom</option><option value="top">Au-dessus, centré</option></select></div></div>
+  <div class="box"><b>Pied de page de la carte</b><p><small>Cochez ce qui doit s'afficher chez le client.</small></p>
+  ${FT.map(([k,l])=>`<div class="f"><label><input type="checkbox" id="s_${k}" ${ft[k]&&ft[k].on?'checked':''}> ${l}</label>${k=='rules'?`<textarea id="f_${k}" rows="4">${esc(ft[k]&&ft[k].v)}</textarea>`:`<input id="f_${k}" value="${esc(ft[k]&&ft[k].v)}">`}</div>`).join('')}</div>
+  <button class="p" id="sv">Enregistrer</button>`;
+  $('#c_mode').value=G.mode;$('#c_logoPos').value=G.logoPos||'left';
+  const lp=()=>$('#lgp').innerHTML=lg?`<img src="${lg}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover">`:'';lp();
+  document.querySelectorAll('[data-th]').forEach(b=>b.onclick=()=>{const t=THEMES[b.dataset.th],s=document.documentElement.style;
+    $('#c_accent').value=t[1];$('#c_bg1').value=t[2];$('#c_bg2').value=t[3];s.setProperty('--a',t[1]);s.setProperty('--b1',t[2]);s.setProperty('--b2',t[3])});
+  $('#lgf').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{const k=120/Math.max(im.width,im.height,120),c=document.createElement('canvas');
+    c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);lg=c.toDataURL('image/png');lp()};im.src=URL.createObjectURL(f)};
+  $('#lgx').onclick=()=>{lg='';lp()};
   $('#sv').onclick=async()=>{const c={};F.forEach(([k,,t])=>{let v=$('#c_'+k).value;if(t=='number')v=+v;if(k=='pin'&&!v)return;c[k]=v});
-    await call({a:'save',cfg:c});if(c.pin){PIN=c.pin;sessionStorage.pin=PIN}toast('Réglages enregistrés')};
+    c.logo=lg;c.logoPos=$('#c_logoPos').value;c.foot={};FT.forEach(([k])=>c.foot[k]={v:$('#f_'+k).value.trim(),on:$('#s_'+k).checked});
+    try{await call({a:'save',cfg:c});if(c.pin){PIN=c.pin;sessionStorage.pin=PIN}toast('Réglages enregistrés')}catch(e){toast(e)}};
 }
-
+async function tSt(){
+  $('#tab').innerHTML='<div class="box">Chargement…</div>';
+  const {s}=await call({a:'stats'}),mx=Math.max(1,...s.series.map(x=>x[1]));
+  const K=[['Clients',s.clients],['Nouveaux (30 jours)',s.new30],['Actifs (30 jours)',s.active30],['Tampons donnés',s.stamps],['Récompenses utilisées',s.used],['Récompenses en attente',s.pending]];
+  $('#tab').innerHTML=`<div class="stg">${K.map(([l,v])=>`<div class="box"><div class="serif" style="font-size:34px">${v}</div><small>${l}</small></div>`).join('')}</div>
+  <div class="box"><b>Tampons – 14 derniers jours</b><div class="bars">${s.series.map(([k,v])=>`<div title="${k} : ${v}"><span style="height:${v/mx*100}%"></span><small>${k.slice(3)}</small></div>`).join('')}</div></div>
+  <div class="box"><b>Meilleurs clients</b>${s.top.map(c=>`<div class="li"><span>${esc(c.name)}</span><b>${c.stamps}</b></div>`).join('')||'<p>Aucun client.</p>'}</div>`;
+}
+function csv(n,rows){const t=rows.map(r=>r.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv'}));a.download=n;a.click()}
+function footHTML(g){const f=g.foot||{},v=k=>f[k]&&f[k].on?String(f[k].v||'').trim():'';
+  const u=(b,x)=>/^https?:\/\//i.test(x)?x:b+x.replace(/^@/,''),L=[],a=(h,t)=>`<a href="${esc(h)}" target="_blank" rel="noopener">${t}</a>`;
+  if(v('link'))L.push(a(u('https://',v('link')),'Linktree'));if(v('fb'))L.push(a(u('https://facebook.com/',v('fb')),'Facebook'));if(v('ig'))L.push(a(u('https://instagram.com/',v('ig')),'Instagram'));
+  if(v('tel'))L.push(a('tel:'+v('tel').replace(/[^\d+]/g,''),esc(v('tel'))));
+  return `<div class="ft">${L.length?`<div class="lk">${L.join('')}</div>`:''}${v('addr')?`<p>${a('https://maps.google.com/?q='+encodeURIComponent(v('addr')),'📍 '+esc(v('addr')))}</p>`:''}${v('rules')?`<details><summary>Règlement</summary><p>${esc(v('rules'))}</p></details>`:''}</div>`}
+let pw=0;
+function pwa(g){if(pw)return;pw=1;document.title=g.shop;
+  const ic=n=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),gr=x.createLinearGradient(0,0,n,n);gr.addColorStop(0,g.bg1);gr.addColorStop(1,g.bg2);x.fillStyle=gr;x.fillRect(0,0,n,n);x.fillStyle=g.accent;x.font=`${n*.5}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(g.icon,n/2,n/2);return c.toDataURL()};
+  const add=(rel,href)=>{const l=document.createElement('link');l.rel=rel;l.href=href;document.head.appendChild(l)};
+  add('apple-touch-icon',ic(180));
+  add('manifest',URL.createObjectURL(new Blob([JSON.stringify({name:g.shop,short_name:g.shop.slice(0,12),start_url:location.href,display:'standalone',background_color:g.bg1,theme_color:g.bg1,icons:[{src:ic(192),sizes:'192x192',type:'image/png'},{src:ic(512),sizes:'512x512',type:'image/png'}]})],{type:'application/manifest+json'})));
+}
 /* ---------- Routage ---------- */
 const cid=new URLSearchParams(location.search).get('c');
 cid?showCard(cid):admin();
