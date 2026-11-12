@@ -56,9 +56,14 @@ const lib=u=>LB[u]||(LB[u]=new Promise((ok,ko)=>{const s=document.createElement(
 async function qr(id){await lib(QR);const el=$('#qr');if(!el)return;el.innerHTML='';new QRCode(el,{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
 
 /* ---------- Vue client ---------- */
+function view(c,g){
+  if(g.open)return cardHTML(c,g)+footHTML(g)+insHTML();
+  const lim=new Date(Math.min(new Date(c.exp||g.until),new Date(g.until)));
+  if(c.reward&&lim>new Date())return `<div class="ft"><div class="box" style="margin:16px 0 0">⏳ <b>${esc(g.closedTitle)}</b><br>Votre récompense reste utilisable jusqu'au <b>${fd(lim)}</b>.</div></div>`+cardHTML({...c,exp:lim.toISOString()},g)+`<p class="ft" style="white-space:pre-line">${esc(g.closedMsg)}</p>`+footHTML(g);
+  return `<div class="wrap" style="text-align:center;max-width:420px;margin-top:8vh"><div class="hd tp">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div class="serif" style="font-size:28px">${esc(g.shop)}</div></div><h1 class="serif">${esc(g.closedTitle)}</h1><p style="white-space:pre-line">${esc(g.closedMsg)}</p></div>`+footHTML(g)}
 async function showCard(id){
   let last='';
-  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=cardHTML(j.c,j.g)+footHTML(j.g)+insHTML();qr(j.c.id);insBind()};
+  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=view(j.c,j.g);qr(j.c.id);insBind()};
   try{paint(JSON.parse(localStorage['cd_'+id]))}catch(e){app.innerHTML='<div class="wrap"><p style="text-align:center;opacity:.6">Chargement…</p></div>'}
   const draw=async()=>{try{const j=await call({a:'card',id});try{localStorage['cd_'+id]=JSON.stringify(j)}catch(e){}if(JSON.stringify(j)!=last)paint(j)}
     catch(e){if(!app.querySelector('.card'))app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
@@ -70,7 +75,7 @@ async function showCard(id){
 async function admin(){
   if(!PIN)return login();
   let L;try{L=await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
-  app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}</h1>
+  app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}${G.open?'':' <small style="font-size:14px">⛔ clôturé</small>'}</h1>
   <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav>${L.ver>=3?'':'<div class="box" style="border-color:#c33">⚠️ Le backend (Code.gs) n\'est pas à jour : Déployer → Gérer les déploiements → ✏️ → Version : Nouvelle version → Déployer.</div>'}<div id="tab"></div></div>`;
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));tab('scan');
 }
@@ -94,9 +99,12 @@ async function found(id,c){
   try{if(!c)c=(await call({a:'card',id})).c;
     $('#res').innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small><br><small>${esc(c.tel||'')}${c.since?' · client depuis le '+fd(c.since):''}</small>
     <p>${c.stamps} / ${G.need} tampons ${c.reward?'· 🎁 récompense disponible (jusqu\'au '+fd(c.exp)+')':''}</p>
-    <div class="row"><input id="qty" type="number" min="1" value="1" style="max-width:80px"><button class="p" id="st">Ajouter tampon(s)</button>${c.reward?'<button id="rd2">Valider la récompense</button>':''}</div></div>`;
-    const act=async a=>{try{const j=await call({a,id:c.id,n:$('#qty').value});toast(j.msg);found(c.id,j.c);if($('#bk'))hist(c.id)}catch(e){toast(e)}};
-    $('#st').onclick=()=>act('stamp');if(c.reward)$('#rd2').onclick=()=>act('redeem');
+    ${G.open?`<div class="row"><input id="amt" type="number" inputmode="decimal" min="0" step="any" placeholder="Montant (DT)" style="max-width:150px"><button class="p" id="st">Ajouter</button><button id="st1">+1 manuel</button></div><small id="pv">Minimum ${G.dtPerStamp} DT = 1 tampon</small>`:'<p>⛔ Programme clôturé : plus de tampons. Seule la récompense en cours reste utilisable.</p>'}
+    ${c.reward?'<div class="row" style="margin-top:8px"><button id="rd2">Valider la récompense</button></div>':''}</div>`;
+    const act=async(a,x)=>{try{const j=await call({a,id:c.id,...x});toast(j.msg);found(c.id,j.c);if($('#bk'))hist(c.id)}catch(e){toast(e)}};
+    if(G.open){$('#st').onclick=()=>act('stamp',{amount:$('#amt').value});$('#st1').onclick=()=>act('stamp',{n:1});
+      $('#amt').oninput=()=>{const n=Math.floor((+$('#amt').value||0)/G.dtPerStamp);$('#pv').textContent=n?`= ${n} tampon(s)`:`Minimum ${G.dtPerStamp} DT = 1 tampon`}}
+    if(c.reward)$('#rd2').onclick=()=>act('redeem');
     if($('#bk')){$('#res').insertAdjacentHTML('beforeend',`<div class="box row"><input id="en" value="${esc(c.name)}"><input id="et" value="${esc(c.tel)}"><button id="es">Modifier</button><button id="ed">Supprimer</button></div>`);
       $('#es').onclick=async()=>{try{await call({a:'edit',id:c.id,name:$('#en').value.trim(),tel:$('#et').value.trim()});toast('Client modifié');tClient(c.id)}catch(e){toast(e)}};
       $('#ed').onclick=async()=>{if(confirm('Supprimer ce client et sa carte ?')){try{await call({a:'del',id:c.id});toast('Client supprimé');tCl()}catch(e){toast(e)}}}}
@@ -141,6 +149,13 @@ function tCf(){
   ['mode','Après utilisation','select'],['icon','Icône du tampon'],['accent','Couleur d\'accent','color'],['bg1','Fond de carte (début)','color'],['bg2','Fond de carte (fin)','color'],['pin','Nouveau PIN (vide = inchangé)','password']];
   $('#tab').innerHTML=`<div class="box"><b>Thèmes prêts</b><div class="row" style="margin:8px 0 14px">${THEMES.map((t,i)=>`<button data-th="${i}" style="background:linear-gradient(135deg,${t[2]},${t[3]});color:${t[1]};border:0">${t[0]}</button>`).join('')}</div>
   ${F.map(([k,l,t])=>`<div class="f"><label>${l}</label>${t=='select'?`<select id="c_${k}"><option value="carry">Garder l'excédent de tampons</option><option value="zero">Remettre à zéro</option></select>`:`<input id="c_${k}" type="${t||'text'}" value="${k=='pin'?'':esc(G[k])}">`}</div>`).join('')}</div>
+  <div class="box"><b>Programme</b>
+  <div class="f"><label>DT d'achat pour 1 tampon</label><input id="c_dtPerStamp" type="number" min="1" value="${esc(G.dtPerStamp)}"></div>
+  <div class="f"><label>Date de fin de la carte (vide = sans fin)</label><input id="c_endDate" type="date" value="${esc(G.endDate)}"></div>
+  <div class="f"><label>Jours pendant lesquels les récompenses restent utilisables après la clôture</label><input id="c_graceDays" type="number" min="0" value="${esc(G.graceDays)}"></div>
+  <div class="f"><label><input type="checkbox" id="c_closed" ${G.closed?'checked':''}> Clôturer le programme maintenant (page de clôture chez les clients)</label></div>
+  <div class="f"><label>Titre de la page de clôture</label><input id="c_closedTitle" value="${esc(G.closedTitle)}"></div>
+  <div class="f"><label>Message de la page de clôture</label><textarea id="c_closedMsg" rows="4">${esc(G.closedMsg)}</textarea></div></div>
   <div class="box"><b>Logo</b><div class="row" style="margin:8px 0"><input id="lgf" type="file" accept="image/*"><button id="lgx">Retirer</button></div><div id="lgp"></div>
   <div class="f"><label>Position sur la carte</label><select id="c_logoPos"><option value="left">À côté du nom</option><option value="top">Au-dessus, centré</option></select></div></div>
   <div class="box"><b>Pied de page de la carte</b><p><small>Cochez ce qui doit s'afficher chez le client.</small></p>
@@ -154,7 +169,7 @@ function tCf(){
     c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);lg=c.toDataURL('image/png');lp()};im.src=URL.createObjectURL(f)};
   $('#lgx').onclick=()=>{lg='';lp()};
   $('#sv').onclick=async()=>{const c={};F.forEach(([k,,t])=>{let v=$('#c_'+k).value;if(t=='number')v=+v;if(k=='pin'&&!v)return;c[k]=v});
-    c.logo=lg;c.logoPos=$('#c_logoPos').value;c.foot={};FT.forEach(([k])=>c.foot[k]={v:$('#f_'+k).value.trim(),on:$('#s_'+k).checked});
+    c.logo=lg;c.logoPos=$('#c_logoPos').value;c.dtPerStamp=+$('#c_dtPerStamp').value||10;c.endDate=$('#c_endDate').value;c.graceDays=+$('#c_graceDays').value||0;c.closed=$('#c_closed').checked;c.closedTitle=$('#c_closedTitle').value;c.closedMsg=$('#c_closedMsg').value;c.foot={};FT.forEach(([k])=>c.foot[k]={v:$('#f_'+k).value.trim(),on:$('#s_'+k).checked});
     try{await call({a:'save',cfg:c});if(c.pin){PIN=c.pin;sessionStorage.pin=PIN}toast('Réglages enregistrés')}catch(e){toast(e)}};
 }
 async function tSt(){
