@@ -3,9 +3,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#2a1b2e">
 <title>Carte privilège</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{--a:#d9a3b5;--b1:#2a1b2e;--b2:#6b3f5e;--bg:#f6eff0;--ln:#e6d6da}
 *{box-sizing:border-box}
@@ -35,6 +34,7 @@ textarea{width:100%}
 .ft details p{white-space:pre-line;text-align:left;background:#fff;border-radius:12px;padding:10px}.ft summary{cursor:pointer}
 .stg{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}.stg .box{margin:0}
 .bars{display:flex;gap:4px;align-items:flex-end;height:120px;margin-top:10px}.bars div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}.bars span{width:100%;background:var(--a);border-radius:4px 4px 0 0;min-height:2px}.bars small{font-size:10px}
+#sh{position:fixed;inset:0;background:#0007;display:none;align-items:flex-end;justify-content:center;z-index:9}.shb{background:#fff;border-radius:18px 18px 0 0;padding:20px;width:100%;max-width:480px}.shb li{margin:8px 0}
 #msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a1b2e;color:#fff;padding:10px 16px;border-radius:12px;display:none}
 </style></head><body>
 <div id="app"></div><div id="msg" role="status"></div>
@@ -46,26 +46,32 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fd=d=>d?new Date(d).toLocaleDateString('fr-FR'):'';
 const toast=t=>{const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',2600)};
 async function call(o){const r=await fetch(API,{method:'POST',body:JSON.stringify({pin:PIN,...o})});const j=await r.json();if(j.error)throw j.error;if(j.g)theme(j.g);return j}
-function theme(g){G=g;const s=document.documentElement.style;s.setProperty('--a',g.accent);s.setProperty('--b1',g.bg1);s.setProperty('--b2',g.bg2)}
+function theme(g){G=g;const s=document.documentElement.style;s.setProperty('--a',g.accent);s.setProperty('--b1',g.bg1);s.setProperty('--b2',g.bg2);brand(g)}
 function cardHTML(c,g){let s='';for(let i=0;i<g.need;i++)s+=`<i class="${i<c.stamps?'on':''}">${esc(g.icon)}</i>`;
 return `<div class="card"><div class="hd ${g.logoPos=='top'?'tp':''}">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7">${esc(g.cardTitle)}</div></div></div><div class="dots">${s}</div>
 <p>${Math.min(c.stamps,g.need)} / ${g.need}</p>${c.reward?`<div class="rw">🎁 ${esc(g.reward)}<br><small>Valable jusqu'au ${fd(c.exp)}</small></div>`:''}
 <div class="qr" id="qr"></div><div style="text-align:center;opacity:.85">${esc(c.name)} · ${c.id}</div></div>`}
-function qr(id){new QRCode($('#qr'),{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
+const QR='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',H5='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',LB={};
+const lib=u=>LB[u]||(LB[u]=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=ko;document.head.appendChild(s)}));
+async function qr(id){await lib(QR);const el=$('#qr');if(!el)return;el.innerHTML='';new QRCode(el,{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
 
 /* ---------- Vue client ---------- */
 async function showCard(id){
-  const draw=async()=>{try{const j=await call({a:'card',id});theme(j.g);app.innerHTML=cardHTML(j.c,j.g)+footHTML(j.g)+`<p style="text-align:center;font-size:13px;opacity:.7;padding:0 24px">Pour l'avoir sur votre écran d'accueil — iPhone : Partager puis « Sur l'écran d'accueil ». Android : menu ⋮ puis « Installer l'application ».</p>`;qr(j.c.id);pwa(j.g)}
-    catch(e){app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
-  await draw();setInterval(draw,30000);
+  let last='';
+  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=cardHTML(j.c,j.g)+footHTML(j.g)+insHTML();qr(j.c.id);insBind()};
+  try{paint(JSON.parse(localStorage['cd_'+id]))}catch(e){app.innerHTML='<div class="wrap"><p style="text-align:center;opacity:.6">Chargement…</p></div>'}
+  const draw=async()=>{try{const j=await call({a:'card',id});try{localStorage['cd_'+id]=JSON.stringify(j)}catch(e){}if(JSON.stringify(j)!=last)paint(j)}
+    catch(e){if(!app.querySelector('.card'))app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
+  draw();setInterval(()=>{if(!document.hidden)draw()},60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)draw()});
 }
 
 /* ---------- Dashboard ---------- */
 async function admin(){
   if(!PIN)return login();
-  try{await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
+  let L;try{L=await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
   app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}</h1>
-  <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav><div id="tab"></div></div>`;
+  <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav>${L.ver>=3?'':'<div class="box" style="border-color:#c33">⚠️ Le backend (Code.gs) n\'est pas à jour : Déployer → Gérer les déploiements → ✏️ → Version : Nouvelle version → Déployer.</div>'}<div id="tab"></div></div>`;
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));tab('scan');
 }
 function login(err){
@@ -73,14 +79,15 @@ function login(err){
   <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="Code PIN"><button class="p" id="go">Entrer</button></div>${err?`<p>${esc(err)}</p>`:''}</div>`;
   $('#go').onclick=()=>{PIN=$('#pin').value;sessionStorage.pin=PIN;admin()};
 }
-function tab(k){
+async function tab(k){
   if(scn){scn.stop().catch(()=>{});scn=null}
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==k));
-  ({scan:tScan,cl:tCl,st:tSt,hi:tHi,cf:tCf})[k]();
+  try{await ({scan:tScan,cl:tCl,st:tSt,hi:tHi,cf:tCf})[k]()}catch(e){$('#tab').innerHTML='<div class="box">⚠️ '+esc(e)+'</div>'}
 }
-function tScan(){
+async function tScan(){
   $('#tab').innerHTML=`<div class="box"><div id="rd"></div><div class="row" style="margin-top:8px"><input id="mid" placeholder="ou saisir le code (ex: A1B2C3)"><button id="fnd">Chercher</button></div></div><div id="res"></div>`;
   $('#fnd').onclick=()=>found($('#mid').value.trim());
+  await lib(H5);if(!$('#rd'))return;
   scn=new Html5Qrcode('rd');scn.start({facingMode:'environment'},{fps:10,qrbox:200},t=>{scn.stop().catch(()=>{});scn=null;found(t)}).catch(()=>{$('#rd').textContent='Caméra indisponible : saisissez le code.'});
 }
 async function found(id,c){
@@ -124,7 +131,7 @@ function tClient(id){
   $('#tab').innerHTML=`<button id="bk">← Clients</button><div id="res" style="margin-top:10px"></div><div class="box" id="hh">Chargement…</div>`;
   $('#bk').onclick=tCl;found(id);hist(id);
 }
-async function hist(id){const {h}=await call({a:'hist',id});$('#hh').innerHTML='<b class="serif" style="font-size:20px">Historique</b>'+hT(h,false)}
+async function hist(id){try{const {h}=await call({a:'hist',id});$('#hh').innerHTML='<b class="serif" style="font-size:20px">Historique</b>'+hT(h,false)}catch(e){$('#hh').innerHTML='⚠️ '+esc(e)}}
 const THEMES=[['Prune rosé','#d9a3b5','#2a1b2e','#6b3f5e'],['Nuit & or','#d4af6a','#14161f','#2b2f45'],['Bordeaux','#e8b4a0','#3b0f1c','#7a2335'],['Émeraude','#bfe3cf','#0f2a24','#25594c'],['Bleu nuit','#a9c4f5','#0e1b3d','#2f4a8a'],['Blush','#7a3b4e','#f3d6d9','#d99aa8']];
 const FT=[['link','Linktree (lien)'],['fb','Facebook (lien ou nom)'],['ig','Instagram (@nom ou lien)'],['tel','Téléphone'],['addr','Adresse'],['rules','Règlement']];
 let lg='';
@@ -165,14 +172,30 @@ function footHTML(g){const f=g.foot||{},v=k=>f[k]&&f[k].on?String(f[k].v||'').tr
   if(v('link'))L.push(a(u('https://',v('link')),'Linktree'));if(v('fb'))L.push(a(u('https://facebook.com/',v('fb')),'Facebook'));if(v('ig'))L.push(a(u('https://instagram.com/',v('ig')),'Instagram'));
   if(v('tel'))L.push(a('tel:'+v('tel').replace(/[^\d+]/g,''),esc(v('tel'))));
   return `<div class="ft">${L.length?`<div class="lk">${L.join('')}</div>`:''}${v('addr')?`<p>${a('https://maps.google.com/?q='+encodeURIComponent(v('addr')),'📍 '+esc(v('addr')))}</p>`:''}${v('rules')?`<details><summary>Règlement</summary><p>${esc(v('rules'))}</p></details>`:''}</div>`}
-let pw=0;
-function pwa(g){if(pw)return;pw=1;document.title=g.shop;
-  const ic=n=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),gr=x.createLinearGradient(0,0,n,n);gr.addColorStop(0,g.bg1);gr.addColorStop(1,g.bg2);x.fillStyle=gr;x.fillRect(0,0,n,n);x.fillStyle=g.accent;x.font=`${n*.5}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(g.icon,n/2,n/2);return c.toDataURL()};
-  const add=(rel,href)=>{const l=document.createElement('link');l.rel=rel;l.href=href;document.head.appendChild(l)};
-  add('apple-touch-icon',ic(180));
-  add('manifest',URL.createObjectURL(new Blob([JSON.stringify({name:g.shop,short_name:g.shop.slice(0,12),start_url:location.href,display:'standalone',background_color:g.bg1,theme_color:g.bg1,icons:[{src:ic(192),sizes:'192x192',type:'image/png'},{src:ic(512),sizes:'512x512',type:'image/png'}]})],{type:'application/manifest+json'})));
+let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e});
+addEventListener('unhandledrejection',e=>toast(String(e.reason)));
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent),inApp=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+const insHTML=()=>inApp?'':`<div class="ft"><p>Installer la carte sur votre téléphone</p><div class="lk"><button id="ia" class="${isIOS?'':'p'}">🤖 Android</button><button id="ii" class="${isIOS?'p':''}">🍎 iPhone</button></div></div>`;
+function sheet(t,steps){let m=$('#sh');if(!m){m=document.createElement('div');m.id='sh';document.body.appendChild(m)}
+  m.innerHTML=`<div class="shb"><b class="serif" style="font-size:22px">${t}</b><ol>${steps.map(x=>`<li>${x}</li>`).join('')}</ol><button class="p" id="shx">OK</button></div>`;m.style.display='flex';$('#shx').onclick=()=>m.style.display='none'}
+function insBind(){const a=$('#ia'),i=$('#ii');if(!a)return;
+  a.onclick=()=>{if(dp){dp.prompt();dp=null}else sheet('Android',['Touchez le menu ⋮ en haut à droite de Chrome','Choisissez « Installer l\'application » (ou « Ajouter à l\'écran d\'accueil »)','Confirmez : l\'icône apparaît sur votre écran d\'accueil'])};
+  i.onclick=()=>sheet('iPhone',['Ouvrez cette page dans Safari','Touchez le bouton Partager ⬆️ (en bas de l\'écran)','Choisissez « Sur l\'écran d\'accueil »','Touchez Ajouter, puis ouvrez la carte depuis l\'icône'])}
+let bk='';
+async function brand(g){
+  const k=[g.shop,g.logo,g.icon,g.accent,g.bg1,g.bg2].join('|');if(k==bk)return;bk=k;
+  document.title=g.shop;const tc=document.querySelector('meta[name=theme-color]');if(tc)tc.content=g.bg1;
+  const ic=(n,flat)=>new Promise(ok=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),end=()=>ok(c.toDataURL());
+    if(!(flat&&g.logo)){const gr=x.createLinearGradient(0,0,n,n);gr.addColorStop(0,g.bg1);gr.addColorStop(1,g.bg2);x.fillStyle=gr;x.fillRect(0,0,n,n)}
+    const txt=()=>{x.fillStyle=g.accent;x.font=`${n*.5}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(g.icon,n/2,n/2);end()};
+    if(g.logo){const im=new Image();im.onload=()=>{const m=n*(flat?.94:.62),r=Math.min(m/im.width,m/im.height),w=im.width*r,h=im.height*r;x.drawImage(im,(n-w)/2,(n-h)/2,w,h);end()};im.onerror=txt;im.src=g.logo}else txt()});
+  const set=(rel,href,type)=>{let l=document.querySelector(`link[rel="${rel}"]`);if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l)}l.href=href;if(type)l.type=type};
+  const [f,a,i1,i2]=await Promise.all([ic(64,1),ic(180),ic(192),ic(512)]);
+  set('icon',f,'image/png');set('apple-touch-icon',a);
+  if(new URLSearchParams(location.search).has('c'))set('manifest',URL.createObjectURL(new Blob([JSON.stringify({name:g.shop,short_name:g.shop.slice(0,12),start_url:location.href,display:'standalone',background_color:g.bg1,theme_color:g.bg1,icons:[{src:i1,sizes:'192x192',type:'image/png'},{src:i2,sizes:'512x512',type:'image/png'}]})],{type:'application/manifest+json'})));
 }
 /* ---------- Routage ---------- */
 const cid=new URLSearchParams(location.search).get('c');
+if(cid&&'serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 cid?showCard(cid):admin();
 </script></body></html>
