@@ -35,6 +35,10 @@ textarea{width:100%}
 .stg{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}.stg .box{margin:0}
 .bars{display:flex;gap:4px;align-items:flex-end;height:120px;margin-top:10px}.bars div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}.bars span{width:100%;background:var(--a);border-radius:4px 4px 0 0;min-height:2px}.bars small{font-size:10px}
 #sh{position:fixed;inset:0;background:#0007;display:none;align-items:flex-end;justify-content:center;z-index:9}.shb{background:#fff;border-radius:18px 18px 0 0;padding:20px;width:100%;max-width:480px}.shb li{margin:8px 0}
+.bell{position:absolute;top:16px;right:16px;border:0;background:#fff2;color:#fff;border-radius:50%;width:40px;height:40px;font-size:18px;padding:0;z-index:2}.bell i{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;background:#ff5a6e}
+.card .hd{padding-right:44px}
+#np{position:fixed;inset:0;z-index:8;background:#0004;display:flex;align-items:flex-start;justify-content:flex-end;padding:calc(env(safe-area-inset-top) + 64px) 14px 0}
+.npb{background:#fff;border-radius:16px;width:min(340px,100%);max-height:65vh;overflow:auto;padding:14px;box-shadow:0 18px 40px #0004}.ni{padding:10px 0;border-bottom:1px solid var(--ln)}.ni p{margin:4px 0}
 #msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a1b2e;color:#fff;padding:10px 16px;border-radius:12px;display:none}
 </style></head><body>
 <div id="app"></div><div id="msg" role="status"></div>
@@ -47,8 +51,10 @@ const fd=d=>d?new Date(d).toLocaleDateString('fr-FR'):'';
 const toast=t=>{const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',2600)};
 async function call(o){const r=await fetch(API,{method:'POST',body:JSON.stringify({pin:PIN,...o})});const j=await r.json();if(j.error)throw j.error;if(j.g)theme(j.g);return j}
 function theme(g){G=g;const s=document.documentElement.style;s.setProperty('--a',g.accent);s.setProperty('--b1',g.bg1);s.setProperty('--b2',g.bg2);brand(g)}
+let NT=[];const seen=id=>{try{return localStorage['seen_'+id]||''}catch(e){return ''}};
+const fdt=d=>new Date(d).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 function cardHTML(c,g){let s='';for(let i=0;i<g.need;i++)s+=`<i class="${i<c.stamps?'on':''}">${esc(g.icon)}</i>`;
-return `<div class="card"><div class="hd ${g.logoPos=='top'?'tp':''}">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7">${esc(g.cardTitle)}</div></div></div><div class="dots">${s}</div>
+return `<div class="card"><button class="bell" id="bl" aria-label="Notifications">🔔${NT[0]&&NT[0].d>seen(c.id)?'<i></i>':''}</button><div class="hd ${g.logoPos=='top'?'tp':''}">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div><div class="serif" style="font-size:28px">${esc(g.shop)}</div><div style="opacity:.7">${esc(g.cardTitle)}</div></div></div><div class="dots">${s}</div>
 <p>${Math.min(c.stamps,g.need)} / ${g.need}</p>${c.reward?`<div class="rw">🎁 ${esc(g.reward)}<br><small>Valable jusqu'au ${fd(c.exp)}</small></div>`:''}
 <div class="qr" id="qr"></div><div style="text-align:center;opacity:.85">${esc(c.name)} · ${c.id}</div></div>`}
 const QR='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',H5='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',LB={};
@@ -56,6 +62,12 @@ const lib=u=>LB[u]||(LB[u]=new Promise((ok,ko)=>{const s=document.createElement(
 async function qr(id){await lib(QR);const el=$('#qr');if(!el)return;el.innerHTML='';new QRCode(el,{text:id,width:118,height:118,colorDark:'#2a1b2e',colorLight:'#fff'})}
 
 /* ---------- Vue client ---------- */
+function bellBind(id){const b=$('#bl');if(!b)return;
+  b.onclick=()=>{let p=$('#np');if(p){p.remove();return}
+    p=document.createElement('div');p.id='np';
+    p.innerHTML=`<div class="npb"><div class="row" style="justify-content:space-between"><b class="serif" style="font-size:20px">Notifications</b><button id="npx" aria-label="Fermer">✕</button></div>${NT.length?NT.map(x=>`<div class="ni"><b>${esc(x.t)}</b><p>${esc(x.b)}</p><small>${fdt(x.d)}</small></div>`).join(''):'<p>Aucune notification pour le moment.</p>'}</div>`;
+    document.body.appendChild(p);$('#npx').onclick=()=>p.remove();p.onclick=e=>{if(e.target==p)p.remove()};
+    if(NT[0])try{localStorage['seen_'+id]=NT[0].d}catch(e){}const d=b.querySelector('i');if(d)d.remove()}}
 function view(c,g){
   if(g.open)return cardHTML(c,g)+footHTML(g)+insHTML();
   const lim=new Date(Math.min(new Date(c.exp||g.until),new Date(g.until)));
@@ -63,7 +75,7 @@ function view(c,g){
   return `<div class="wrap" style="text-align:center;max-width:420px;margin-top:8vh"><div class="hd tp">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div class="serif" style="font-size:28px">${esc(g.shop)}</div></div><h1 class="serif">${esc(g.closedTitle)}</h1><p style="white-space:pre-line">${esc(g.closedMsg)}</p></div>`+footHTML(g)}
 async function showCard(id){
   let last='';
-  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=view(j.c,j.g);qr(j.c.id);insBind();initPush(j.c.id)};
+  const paint=j=>{last=JSON.stringify(j);theme(j.g);NT=j.n||[];app.innerHTML=view(j.c,j.g);qr(j.c.id);insBind();bellBind(j.c.id);initPush(j.c.id)};
   try{paint(JSON.parse(localStorage['cd_'+id]))}catch(e){app.innerHTML='<div class="wrap"><p style="text-align:center;opacity:.6">Chargement…</p></div>'}
   const draw=async()=>{try{const j=await call({a:'card',id});try{localStorage['cd_'+id]=JSON.stringify(j)}catch(e){}if(JSON.stringify(j)!=last)paint(j)}
     catch(e){if(!app.querySelector('.card'))app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
@@ -174,19 +186,22 @@ const PD={on:false,repeat:14,hour:10,
   expiring:{on:true,days:5,t:'Votre récompense expire bientôt',b:'{nom}, profitez de votre récompense avant le {date}.'}};
 async function tNo(){
   const my=tk,p={...PD,...(G.push||{})},K=['stamp','reward','inactive','expiring'];K.forEach(k=>p[k]={...PD[k],...(p[k]||{})});
-  const [{list},{info}]=await Promise.all([call({a:'list'}),call({a:'pushinfo'})]);if(my!=tk)return;
+  const opts=()=>Object.values(LC).map(c=>`<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('');
   const blk=(k,l,d)=>`<div class="f"><label><input type="checkbox" id="n_${k}" ${p[k].on?'checked':''}> ${l}</label>${d?`<input id="d_${k}" type="number" min="1" value="${p[k].days}" style="max-width:100px"> <small>jours</small>`:''}<input id="t_${k}" value="${esc(p[k].t)}" placeholder="Titre"><textarea id="b_${k}" rows="2">${esc(p[k].b)}</textarea></div>`;
-  $('#tab').innerHTML=`<div class="box"><b>Appareils enregistrés</b><p>${info.devices} appareil(s) · ${info.clients} client(s)${info.key?'':'<br>⚠️ Clé Firebase absente : ajoutez la propriété FCM_SA dans Apps Script.'}</p></div>
-  <div class="box"><b>Envoyer un message</b><div class="f"><select id="sto"><option value="all">Tous les clients</option>${list.map(c=>`<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('')}</select><input id="st_t" placeholder="Titre"><textarea id="st_b" rows="3" placeholder="Message (ex : Nouvelle collection en boutique !)"></textarea></div><button class="p" id="snd">Envoyer</button></div>
+  $('#tab').innerHTML=`<div class="box"><b>Appareils enregistrés</b><p id="pi">Chargement…</p></div>
+  <div class="box"><b>Envoyer un message</b><div class="f"><select id="sto"><option value="all">Tous les clients</option>${opts()}</select><input id="st_t" placeholder="Titre"><textarea id="st_b" rows="3" placeholder="Message (ex : Nouvelle collection en boutique !)"></textarea></div><button class="p" id="snd">Envoyer</button></div>
   <div class="box"><b>Notifications automatiques</b><div class="f"><label><input type="checkbox" id="n_on" ${p.on?'checked':''}> Activer les notifications automatiques</label></div>
   <p><small>Variables : {nom} {tampons} {need} {restant} {recompense} {date}</small></p>
   ${blk('stamp','À chaque ajout de tampons')}${blk('reward','Quand la récompense est débloquée')}${blk('inactive','Rappel si le client ne vient plus après…',1)}${blk('expiring','Rappel avant expiration de la récompense, dans…',1)}
   <div class="row"><div class="f"><label>Délai minimum entre 2 rappels (jours)</label><input id="n_rep" type="number" min="1" value="${p.repeat}"></div><div class="f"><label>Heure d'envoi des rappels</label><input id="n_hour" type="number" min="0" max="23" value="${p.hour}"></div></div>
   <button class="p" id="nsv">Enregistrer</button></div>`;
-  $('#snd').onclick=async()=>{const b=$('#snd');b.disabled=true;try{const r=await call({a:'send',to:$('#sto').value,title:$('#st_t').value.trim(),body:$('#st_b').value.trim()});toast(`Envoyé : ${r.ok}/${r.n} appareil(s)`)}catch(e){toast(e)}b.disabled=false};
+  $('#snd').onclick=async()=>{const b=$('#snd');b.disabled=true;try{const r=await call({a:'send',to:$('#sto').value,title:$('#st_t').value.trim(),body:$('#st_b').value.trim()});toast(r.n?`Envoyé : ${r.ok}/${r.n} appareil(s)`:'Enregistré dans la cloche des clients (aucun appareil enregistré)')}catch(e){toast(e)}b.disabled=false};
   $('#nsv').onclick=async()=>{const q={on:$('#n_on').checked,repeat:+$('#n_rep').value||14,hour:+$('#n_hour').value};
     K.forEach(k=>{q[k]={on:$('#n_'+k).checked,t:$('#t_'+k).value,b:$('#b_'+k).value};if($('#d_'+k))q[k].days=+$('#d_'+k).value||1});
     try{await call({a:'save',cfg:{push:q}});toast('Notifications enregistrées')}catch(e){toast(e)}};
+  try{const [{info}]=await Promise.all([call({a:'pushinfo'}),Object.keys(LC).length?0:loadLC()]);if(my!=tk)return;
+    $('#pi').innerHTML=`${info.devices} appareil(s) · ${info.clients} client(s)${info.key?'':'<br>⚠️ Clé Firebase absente : ajoutez la propriété FCM_SA dans Apps Script.'}`;
+    const s=$('#sto'),v=s.value;s.innerHTML='<option value="all">Tous les clients</option>'+opts();s.value=v}catch(e){if(my==tk)$('#pi').textContent='⚠️ '+e}
 }
 const THEMES=[['Prune rosé','#d9a3b5','#2a1b2e','#6b3f5e'],['Nuit & or','#d4af6a','#14161f','#2b2f45'],['Bordeaux','#e8b4a0','#3b0f1c','#7a2335'],['Émeraude','#bfe3cf','#0f2a24','#25594c'],['Bleu nuit','#a9c4f5','#0e1b3d','#2f4a8a'],['Blush','#7a3b4e','#f3d6d9','#d99aa8']];
 const FT=[['link','Linktree (lien)'],['fb','Facebook (lien ou nom)'],['ig','Instagram (@nom ou lien)'],['tel','Téléphone'],['addr','Adresse'],['rules','Règlement']];
