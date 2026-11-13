@@ -63,7 +63,7 @@ function view(c,g){
   return `<div class="wrap" style="text-align:center;max-width:420px;margin-top:8vh"><div class="hd tp">${g.logo?`<img src="${esc(g.logo)}" alt="">`:''}<div class="serif" style="font-size:28px">${esc(g.shop)}</div></div><h1 class="serif">${esc(g.closedTitle)}</h1><p style="white-space:pre-line">${esc(g.closedMsg)}</p></div>`+footHTML(g)}
 async function showCard(id){
   let last='';
-  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=view(j.c,j.g);qr(j.c.id);insBind()};
+  const paint=j=>{last=JSON.stringify(j);theme(j.g);app.innerHTML=view(j.c,j.g);qr(j.c.id);insBind();initPush(j.c.id)};
   try{paint(JSON.parse(localStorage['cd_'+id]))}catch(e){app.innerHTML='<div class="wrap"><p style="text-align:center;opacity:.6">Chargement…</p></div>'}
   const draw=async()=>{try{const j=await call({a:'card',id});try{localStorage['cd_'+id]=JSON.stringify(j)}catch(e){}if(JSON.stringify(j)!=last)paint(j)}
     catch(e){if(!app.querySelector('.card'))app.innerHTML=`<div class="wrap"><p>${esc(e)}</p></div>`}};
@@ -74,46 +74,72 @@ async function showCard(id){
 /* ---------- Dashboard ---------- */
 async function admin(){
   if(!PIN)return login();
-  let L;try{L=await call({a:'login'})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
+  let L;try{L=await call({a:'login',base:location.origin+location.pathname})}catch(e){PIN='';sessionStorage.pin='';return login(e)}
   app.innerHTML=`<div class="wrap"><h1 class="serif" style="margin:4px 0 12px">${esc(G.shop)}${G.open?'':' <small style="font-size:14px">⛔ clôturé</small>'}</h1>
-  <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav>${L.ver>=3?'':'<div class="box" style="border-color:#c33">⚠️ Le backend (Code.gs) n\'est pas à jour : Déployer → Gérer les déploiements → ✏️ → Version : Nouvelle version → Déployer.</div>'}<div id="tab"></div></div>`;
-  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));tab('scan');
+  <nav>${[['scan','Scanner'],['cl','Clients'],['st','Stats'],['hi','Historique'],['no','Notifications'],['cf','Réglages']].map(([k,t])=>`<button data-t="${k}">${t}</button>`).join('')}</nav>${L.ver>=4?'':'<div class="box" style="border-color:#c33">⚠️ Le backend (Code.gs) n\'est pas à jour : Déployer → Gérer les déploiements → ✏️ → Version : Nouvelle version → Déployer.</div>'}<div id="tab"></div></div>`;
+  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));loadLC();tab('scan');
 }
 function login(err){
   app.innerHTML=`<div class="wrap" style="max-width:360px;margin-top:20vh"><h1 class="serif">Espace boutique</h1>
   <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="Code PIN"><button class="p" id="go">Entrer</button></div>${err?`<p>${esc(err)}</p>`:''}</div>`;
   $('#go').onclick=()=>{PIN=$('#pin').value;sessionStorage.pin=PIN;admin()};
 }
+let tk=0,stp=Promise.resolve(),LC={};
+async function loadLC(){try{const {list}=await call({a:'list'});LC={};list.forEach(c=>LC[c.id]=c)}catch(e){}}
+function stopScan(){const x=scn;scn=null;if(x)stp=x.stop().then(()=>x.clear()).catch(()=>{});return stp}
 async function tab(k){
-  if(scn){scn.stop().catch(()=>{});scn=null}
+  const my=++tk;stopScan();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==k));
-  try{await ({scan:tScan,cl:tCl,st:tSt,hi:tHi,cf:tCf})[k]()}catch(e){$('#tab').innerHTML='<div class="box">⚠️ '+esc(e)+'</div>'}
+  try{await ({scan:tScan,cl:tCl,st:tSt,hi:tHi,no:tNo,cf:tCf})[k]()}catch(e){if(my==tk)$('#tab').innerHTML='<div class="box">⚠️ '+esc(e)+'</div>'}
 }
 async function tScan(){
-  $('#tab').innerHTML=`<div class="box"><div id="rd"></div><div class="row" style="margin-top:8px"><input id="mid" placeholder="ou saisir le code (ex: A1B2C3)"><button id="fnd">Chercher</button></div></div><div id="res"></div>`;
-  $('#fnd').onclick=()=>found($('#mid').value.trim());
-  await lib(H5);if(!$('#rd'))return;
-  scn=new Html5Qrcode('rd');scn.start({facingMode:'environment'},{fps:10,qrbox:200},t=>{scn.stop().catch(()=>{});scn=null;found(t)}).catch(()=>{$('#rd').textContent='Caméra indisponible : saisissez le code.'});
+  $('#tab').innerHTML=`<div class="box" id="rbox"><div id="rd"></div><div class="row" style="margin-top:8px"><input id="mid" placeholder="ou saisir le code (ex: A1B2C3)"><button id="fnd">Chercher</button></div></div><div id="res"></div>`;
+  $('#fnd').onclick=()=>{const v=$('#mid').value.trim();if(v){$('#mid').value='';stopScan();found(v)}};
+  await startScan();
+}
+async function startScan(){
+  const my=tk;await stp;await lib(H5);if(my!=tk||!$('#rd'))return;
+  $('#rbox').style.display='';
+  const me=scn=new Html5Qrcode('rd');
+  me.start({facingMode:'environment'},{fps:10,qrbox:200},t=>{if(scn!==me)return;navigator.vibrate&&navigator.vibrate(50);stopScan();found(t)})
+    .catch(()=>{if(scn===me)$('#rd').textContent='Caméra indisponible : saisissez le code.'});
 }
 async function found(id,c){
-  try{if(!c)c=(await call({a:'card',id})).c;
-    $('#res').innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small><br><small>${esc(c.tel||'')}${c.since?' · client depuis le '+fd(c.since):''}</small>
+  const my=tk,scan=!$('#bk');id=String(id).trim();const m=id.match(/[?&]c=([A-Za-z0-9]+)/);if(m)id=m[1];id=id.toUpperCase();
+  try{
+    if(!c){
+      if(scan&&$('#rbox'))$('#rbox').style.display='none';
+      if(LC[id])show(LC[id],scan);else $('#res').innerHTML=`<div class="box">Recherche de ${esc(id)}…</div>`;
+      c=(await call({a:'card',id})).c;if(my!=tk)return;LC[id]=c}
+    show(c,scan);
+  }catch(e){if(my!=tk)return;toast(e);if(scan&&$('#rbox')){$('#res').innerHTML='';startScan()}}
+}
+function show(c,scan){
+  const R=$('#res'),keep=R.dataset.id==c.id&&$('#amt')?$('#amt').value:'';R.dataset.id=c.id;
+  R.innerHTML=`<div class="box"><b class="serif" style="font-size:22px">${esc(c.name)}</b> <small>${c.id}</small><br><small>${esc(c.tel||'')}${c.since?' · client depuis le '+fd(c.since):''}</small>
     <p>${c.stamps} / ${G.need} tampons ${c.reward?'· 🎁 récompense disponible (jusqu\'au '+fd(c.exp)+')':''}</p>
     ${G.open?`<div class="row"><input id="amt" type="number" inputmode="decimal" min="0" step="any" placeholder="Montant (DT)" style="max-width:150px"><button class="p" id="st">Ajouter</button><button id="st1">+1 manuel</button></div><small id="pv">Minimum ${G.dtPerStamp} DT = 1 tampon</small>`:'<p>⛔ Programme clôturé : plus de tampons. Seule la récompense en cours reste utilisable.</p>'}
-    ${c.reward?'<div class="row" style="margin-top:8px"><button id="rd2">Valider la récompense</button></div>':''}</div>`;
-    const act=async(a,x)=>{try{const j=await call({a,id:c.id,...x});toast(j.msg);found(c.id,j.c);if($('#bk'))hist(c.id)}catch(e){toast(e)}};
-    if(G.open){$('#st').onclick=()=>act('stamp',{amount:$('#amt').value});$('#st1').onclick=()=>act('stamp',{n:1});
-      $('#amt').oninput=()=>{const n=Math.floor((+$('#amt').value||0)/G.dtPerStamp);$('#pv').textContent=n?`= ${n} tampon(s)`:`Minimum ${G.dtPerStamp} DT = 1 tampon`}}
-    if(c.reward)$('#rd2').onclick=()=>act('redeem');
-    if($('#bk')){$('#res').insertAdjacentHTML('beforeend',`<div class="box row"><input id="en" value="${esc(c.name)}"><input id="et" value="${esc(c.tel)}"><button id="es">Modifier</button><button id="ed">Supprimer</button></div>`);
-      $('#es').onclick=async()=>{try{await call({a:'edit',id:c.id,name:$('#en').value.trim(),tel:$('#et').value.trim()});toast('Client modifié');tClient(c.id)}catch(e){toast(e)}};
-      $('#ed').onclick=async()=>{if(confirm('Supprimer ce client et sa carte ?')){try{await call({a:'del',id:c.id});toast('Client supprimé');tCl()}catch(e){toast(e)}}}}
-  }catch(e){toast(e)}
+    ${c.reward?'<div class="row" style="margin-top:8px"><button id="rd2">Valider la récompense</button></div>':''}
+    ${scan?'<div class="row" style="margin-top:10px"><button id="ns">Nouveau scan</button></div>':''}</div>`;
+  const act=async(a,x)=>{R.querySelectorAll('button').forEach(b=>b.disabled=true);
+    try{const j=await call({a,id:c.id,...x});LC[c.id]=j.c;toast(j.msg);if(!$('#res'))return;
+      if(scan&&a=='stamp'){delete R.dataset.id;R.innerHTML=`<div class="box">✅ <b>${esc(j.c.name)}</b> — ${esc(j.msg)}<br><small>${j.c.stamps}/${G.need} tampons${j.c.reward?' · 🎁 récompense disponible':''}</small></div>`;startScan()}
+      else{show(j.c,scan);if(!scan)hist(c.id)}}
+    catch(e){toast(e);if($('#res'))R.querySelectorAll('button').forEach(b=>b.disabled=false)}};
+  if(G.open){$('#st').onclick=()=>act('stamp',{amount:$('#amt').value});$('#st1').onclick=()=>act('stamp',{n:1});
+    $('#amt').oninput=()=>{const n=Math.floor((+$('#amt').value||0)/G.dtPerStamp);$('#pv').textContent=n?`= ${n} tampon(s)`:`Minimum ${G.dtPerStamp} DT = 1 tampon`};
+    if(keep){$('#amt').value=keep;$('#amt').oninput()}}
+  if(c.reward)$('#rd2').onclick=()=>act('redeem');
+  if(scan)$('#ns').onclick=()=>{R.innerHTML='';delete R.dataset.id;startScan()};
+  if($('#bk')){R.insertAdjacentHTML('beforeend',`<div class="box row"><input id="en" value="${esc(c.name)}"><input id="et" value="${esc(c.tel)}"><button id="es">Modifier</button><button id="ed">Supprimer</button></div>`);
+    $('#es').onclick=async()=>{try{await call({a:'edit',id:c.id,name:$('#en').value.trim(),tel:$('#et').value.trim()});delete LC[c.id];toast('Client modifié');tClient(c.id)}catch(e){toast(e)}};
+    $('#ed').onclick=async()=>{if(confirm('Supprimer ce client et sa carte ?')){try{await call({a:'del',id:c.id});delete LC[c.id];toast('Client supprimé');tCl()}catch(e){toast(e)}}}}
 }
 async function tCl(){
+  const my=tk;
   $('#tab').innerHTML=`<div class="box"><div class="row"><input id="nm" placeholder="Nom"><input id="tl" placeholder="Téléphone" inputmode="tel"><button class="p" id="ad">Créer la carte</button></div><button id="ex" style="margin-top:8px">Exporter les clients (CSV)</button></div>
   <input id="q" placeholder="Rechercher…" style="width:100%;margin-bottom:10px"><div class="box" id="ls">Chargement…</div>`;
-  const {list}=await call({a:'list'});
+  const {list}=await call({a:'list'});if(my!=tk)return;LC={};list.forEach(c=>LC[c.id]=c);
   const draw=()=>{const q=$('#q').value.toLowerCase();
     $('#ls').innerHTML=list.filter(c=>(c.name+c.tel+c.id).toLowerCase().includes(q)).map(c=>`<div class="li"><div><b><a href="#" data-d="${c.id}" style="color:inherit">${esc(c.name)}</a></b><br><small>${c.id} · ${c.stamps}/${G.need}${c.reward?' · 🎁':''}</small></div>
     <div class="row"><button data-l="${c.id}">Lien</button><button data-w="${c.id}">WhatsApp</button></div></div>`).join('')||'Aucun client.';
@@ -128,8 +154,9 @@ async function tCl(){
 const link=id=>location.origin+location.pathname+'?c='+id;
 const hT=(h,n)=>h.length?`<table>${h.map(r=>`<tr><td>${new Date(r.d).toLocaleString('fr-FR')}</td>${n?`<td>${esc(r.n)}</td>`:''}<td>${esc(r.a)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table>`:'Aucun mouvement.';
 async function tHi(id=''){
+  const my=tk;
   $('#tab').innerHTML=`<div class="box row"><select id="hc"><option value="">Tous les clients</option></select><select id="ha"><option value="">Toutes les actions</option><option>tampon</option><option>récompense</option><option>création</option><option>modification</option></select><button id="hx">Exporter CSV</button></div><div class="box" id="hh">Chargement…</div>`;
-  const [{list},{h}]=await Promise.all([call({a:'list'}),call({a:'hist',id})]);
+  const [{list},{h}]=await Promise.all([call({a:'list'}),call({a:'hist',id})]);if(my!=tk)return;
   $('#hc').innerHTML+=list.map(c=>`<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('');$('#hc').value=id;
   let cur=h;const draw=()=>{const a=$('#ha').value;cur=h.filter(r=>!a||String(r.a).includes(a));$('#hh').innerHTML=hT(cur,!id)};
   $('#hx').onclick=()=>csv('historique.csv',[['date','id','client','action','détail'],...cur.map(r=>[new Date(r.d).toLocaleString('fr-FR'),r.id,r.n,r.a,r.t])]);
@@ -139,7 +166,28 @@ function tClient(id){
   $('#tab').innerHTML=`<button id="bk">← Clients</button><div id="res" style="margin-top:10px"></div><div class="box" id="hh">Chargement…</div>`;
   $('#bk').onclick=tCl;found(id);hist(id);
 }
-async function hist(id){try{const {h}=await call({a:'hist',id});$('#hh').innerHTML='<b class="serif" style="font-size:20px">Historique</b>'+hT(h,false)}catch(e){$('#hh').innerHTML='⚠️ '+esc(e)}}
+async function hist(id){const my=tk;try{const {h}=await call({a:'hist',id});if(my!=tk)return;$('#hh').innerHTML='<b class="serif" style="font-size:20px">Historique</b>'+hT(h,false)}catch(e){$('#hh').innerHTML='⚠️ '+esc(e)}}
+const PD={on:false,repeat:14,hour:10,
+  stamp:{on:true,t:'Carte Privilège',b:'Merci {nom} ! Vous avez {tampons}/{need} tampons.'},
+  reward:{on:true,t:'Récompense débloquée 🎁',b:'Bravo {nom}, votre récompense vous attend : {recompense}.'},
+  inactive:{on:false,days:30,t:'Vous nous manquez',b:'{nom}, il vous manque {restant} tampon(s) pour votre récompense. À bientôt !'},
+  expiring:{on:true,days:5,t:'Votre récompense expire bientôt',b:'{nom}, profitez de votre récompense avant le {date}.'}};
+async function tNo(){
+  const my=tk,p={...PD,...(G.push||{})},K=['stamp','reward','inactive','expiring'];K.forEach(k=>p[k]={...PD[k],...(p[k]||{})});
+  const [{list},{info}]=await Promise.all([call({a:'list'}),call({a:'pushinfo'})]);if(my!=tk)return;
+  const blk=(k,l,d)=>`<div class="f"><label><input type="checkbox" id="n_${k}" ${p[k].on?'checked':''}> ${l}</label>${d?`<input id="d_${k}" type="number" min="1" value="${p[k].days}" style="max-width:100px"> <small>jours</small>`:''}<input id="t_${k}" value="${esc(p[k].t)}" placeholder="Titre"><textarea id="b_${k}" rows="2">${esc(p[k].b)}</textarea></div>`;
+  $('#tab').innerHTML=`<div class="box"><b>Appareils enregistrés</b><p>${info.devices} appareil(s) · ${info.clients} client(s)${info.key?'':'<br>⚠️ Clé Firebase absente : ajoutez la propriété FCM_SA dans Apps Script.'}</p></div>
+  <div class="box"><b>Envoyer un message</b><div class="f"><select id="sto"><option value="all">Tous les clients</option>${list.map(c=>`<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('')}</select><input id="st_t" placeholder="Titre"><textarea id="st_b" rows="3" placeholder="Message (ex : Nouvelle collection en boutique !)"></textarea></div><button class="p" id="snd">Envoyer</button></div>
+  <div class="box"><b>Notifications automatiques</b><div class="f"><label><input type="checkbox" id="n_on" ${p.on?'checked':''}> Activer les notifications automatiques</label></div>
+  <p><small>Variables : {nom} {tampons} {need} {restant} {recompense} {date}</small></p>
+  ${blk('stamp','À chaque ajout de tampons')}${blk('reward','Quand la récompense est débloquée')}${blk('inactive','Rappel si le client ne vient plus après…',1)}${blk('expiring','Rappel avant expiration de la récompense, dans…',1)}
+  <div class="row"><div class="f"><label>Délai minimum entre 2 rappels (jours)</label><input id="n_rep" type="number" min="1" value="${p.repeat}"></div><div class="f"><label>Heure d'envoi des rappels</label><input id="n_hour" type="number" min="0" max="23" value="${p.hour}"></div></div>
+  <button class="p" id="nsv">Enregistrer</button></div>`;
+  $('#snd').onclick=async()=>{const b=$('#snd');b.disabled=true;try{const r=await call({a:'send',to:$('#sto').value,title:$('#st_t').value.trim(),body:$('#st_b').value.trim()});toast(`Envoyé : ${r.ok}/${r.n} appareil(s)`)}catch(e){toast(e)}b.disabled=false};
+  $('#nsv').onclick=async()=>{const q={on:$('#n_on').checked,repeat:+$('#n_rep').value||14,hour:+$('#n_hour').value};
+    K.forEach(k=>{q[k]={on:$('#n_'+k).checked,t:$('#t_'+k).value,b:$('#b_'+k).value};if($('#d_'+k))q[k].days=+$('#d_'+k).value||1});
+    try{await call({a:'save',cfg:{push:q}});toast('Notifications enregistrées')}catch(e){toast(e)}};
+}
 const THEMES=[['Prune rosé','#d9a3b5','#2a1b2e','#6b3f5e'],['Nuit & or','#d4af6a','#14161f','#2b2f45'],['Bordeaux','#e8b4a0','#3b0f1c','#7a2335'],['Émeraude','#bfe3cf','#0f2a24','#25594c'],['Bleu nuit','#a9c4f5','#0e1b3d','#2f4a8a'],['Blush','#7a3b4e','#f3d6d9','#d99aa8']];
 const FT=[['link','Linktree (lien)'],['fb','Facebook (lien ou nom)'],['ig','Instagram (@nom ou lien)'],['tel','Téléphone'],['addr','Adresse'],['rules','Règlement']];
 let lg='';
@@ -173,8 +221,9 @@ function tCf(){
     try{await call({a:'save',cfg:c});if(c.pin){PIN=c.pin;sessionStorage.pin=PIN}toast('Réglages enregistrés')}catch(e){toast(e)}};
 }
 async function tSt(){
+  const my=tk;
   $('#tab').innerHTML='<div class="box">Chargement…</div>';
-  const {s}=await call({a:'stats'}),mx=Math.max(1,...s.series.map(x=>x[1]));
+  const {s}=await call({a:'stats'});if(my!=tk)return;const mx=Math.max(1,...s.series.map(x=>x[1]));
   const K=[['Clients',s.clients],['Nouveaux (30 jours)',s.new30],['Actifs (30 jours)',s.active30],['Tampons donnés',s.stamps],['Récompenses utilisées',s.used],['Récompenses en attente',s.pending]];
   $('#tab').innerHTML=`<div class="stg">${K.map(([l,v])=>`<div class="box"><div class="serif" style="font-size:34px">${v}</div><small>${l}</small></div>`).join('')}</div>
   <div class="box"><b>Tampons – 14 derniers jours</b><div class="bars">${s.series.map(([k,v])=>`<div title="${k} : ${v}"><span style="height:${v/mx*100}%"></span><small>${k.slice(3)}</small></div>`).join('')}</div></div>
@@ -187,6 +236,20 @@ function footHTML(g){const f=g.foot||{},v=k=>f[k]&&f[k].on?String(f[k].v||'').tr
   if(v('link'))L.push(a(u('https://',v('link')),'Linktree'));if(v('fb'))L.push(a(u('https://facebook.com/',v('fb')),'Facebook'));if(v('ig'))L.push(a(u('https://instagram.com/',v('ig')),'Instagram'));
   if(v('tel'))L.push(a('tel:'+v('tel').replace(/[^\d+]/g,''),esc(v('tel'))));
   return `<div class="ft">${L.length?`<div class="lk">${L.join('')}</div>`:''}${v('addr')?`<p>${a('https://maps.google.com/?q='+encodeURIComponent(v('addr')),'📍 '+esc(v('addr')))}</p>`:''}${v('rules')?`<details><summary>Règlement</summary><p>${esc(v('rules'))}</p></details>`:''}</div>`}
+const FB={apiKey:"AIzaSyA0DRAyl7nVuF7yxOFSDS0_z1NZoYuXUtI",authDomain:"carte-fidelite-7a6bc.firebaseapp.com",projectId:"carte-fidelite-7a6bc",storageBucket:"carte-fidelite-7a6bc.firebasestorage.app",messagingSenderId:"975448792225",appId:"1:975448792225:web:c64c4f9bac9717677324e0"};
+const VAPID='BLef86mt6X4XKxSBKGdRr_Cm51KVGmvBGBsd6fbRU3h-ZA0yJSeFL52WNq6bsARmw3cii9Mpu4KvWmy_57SQH9Q',FJ='https://www.gstatic.com/firebasejs/10.12.0/firebase-';
+/* Notifications côté client : aucune interface. La permission est demandée au 1er contact avec la page (iOS l'exige après un geste). */
+function initPush(id){
+  if(initPush.d||!('serviceWorker' in navigator&&'Notification' in window&&'PushManager' in window))return;
+  if(isIOS&&!inApp)return;if(Notification.permission=='denied')return;initPush.d=1;
+  let run=0;const go=async()=>{if(run)return;run=1;
+    try{if(Notification.permission!='granted'&&await Notification.requestPermission()!='granted')return;
+      await lib(FJ+'app-compat.js');await lib(FJ+'messaging-compat.js');if(!firebase.apps.length)firebase.initializeApp(FB);
+      const reg=await navigator.serviceWorker.ready,m=firebase.messaging(),t=await m.getToken({vapidKey:VAPID,serviceWorkerRegistration:reg});
+      if(t&&localStorage['tk_'+id]!=t){await call({a:'token',id,token:t});localStorage['tk_'+id]=t}
+      m.onMessage(p=>{const n=p.notification||{};toast((n.title||'')+' — '+(n.body||''))})}catch(e){}};
+  if(Notification.permission=='granted')go();else['click','touchend'].forEach(e=>addEventListener(e,go,{once:true,passive:true}));
+}
 let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e});
 addEventListener('unhandledrejection',e=>toast(String(e.reason)));
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent),inApp=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
@@ -200,17 +263,21 @@ let bk='';
 async function brand(g){
   const k=[g.shop,g.logo,g.icon,g.accent,g.bg1,g.bg2].join('|');if(k==bk)return;bk=k;
   document.title=g.shop;const tc=document.querySelector('meta[name=theme-color]');if(tc)tc.content=g.bg1;
-  const ic=(n,flat)=>new Promise(ok=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),end=()=>ok(c.toDataURL());
-    if(!(flat&&g.logo)){const gr=x.createLinearGradient(0,0,n,n);gr.addColorStop(0,g.bg1);gr.addColorStop(1,g.bg2);x.fillStyle=gr;x.fillRect(0,0,n,n)}
-    const txt=()=>{x.fillStyle=g.accent;x.font=`${n*.5}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(g.icon,n/2,n/2);end()};
-    if(g.logo){const im=new Image();im.onload=()=>{const m=n*(flat?.94:.62),r=Math.min(m/im.width,m/im.height),w=im.width*r,h=im.height*r;x.drawImage(im,(n-w)/2,(n-h)/2,w,h);end()};im.onerror=txt;im.src=g.logo}else txt()});
+  const ic=(n,pad)=>new Promise(ok=>{const c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),end=()=>ok(c.toDataURL());
+    const txt=()=>{const gr=x.createLinearGradient(0,0,n,n);gr.addColorStop(0,g.bg1);gr.addColorStop(1,g.bg2);x.fillStyle=gr;x.fillRect(0,0,n,n);x.fillStyle=g.accent;x.font=`${n*.5}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(g.icon,n/2,n/2);end()};
+    if(!g.logo)return txt();
+    const im=new Image();im.onload=()=>{const t=document.createElement('canvas');t.width=t.height=16;const y=t.getContext('2d');y.drawImage(im,0,0,16,16);
+      const d=y.getImageData(0,0,16,16).data;let sm=0,w=0;for(let i=0;i<d.length;i+=4){const al=d[i+3]/255;sm+=(.299*d[i]+.587*d[i+1]+.114*d[i+2])*al;w+=al}
+      x.fillStyle=w&&sm/w>150?'#1b1b1f':'#ffffff';x.fillRect(0,0,n,n);
+      const m=n*pad,r=Math.min(m/im.width,m/im.height),W=im.width*r,H=im.height*r;x.drawImage(im,(n-W)/2,(n-H)/2,W,H);end()};
+    im.onerror=txt;im.src=g.logo});
   const set=(rel,href,type)=>{let l=document.querySelector(`link[rel="${rel}"]`);if(!l){l=document.createElement('link');l.rel=rel;document.head.appendChild(l)}l.href=href;if(type)l.type=type};
-  const [f,a,i1,i2]=await Promise.all([ic(64,1),ic(180),ic(192),ic(512)]);
+  const [f,a,i1,i2]=await Promise.all([ic(64,.84),ic(180,.62),ic(192,.62),ic(512,.62)]);
   set('icon',f,'image/png');set('apple-touch-icon',a);
   if(new URLSearchParams(location.search).has('c'))set('manifest',URL.createObjectURL(new Blob([JSON.stringify({name:g.shop,short_name:g.shop.slice(0,12),start_url:location.href,display:'standalone',background_color:g.bg1,theme_color:g.bg1,icons:[{src:i1,sizes:'192x192',type:'image/png'},{src:i2,sizes:'512x512',type:'image/png'}]})],{type:'application/manifest+json'})));
 }
 /* ---------- Routage ---------- */
 const cid=new URLSearchParams(location.search).get('c');
-if(cid&&'serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(cid&&'serviceWorker' in navigator)navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
 cid?showCard(cid):admin();
 </script></body></html>
