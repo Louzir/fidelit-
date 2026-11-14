@@ -1,7 +1,18 @@
-// Service worker : notifications push (Firebase) + installation de la carte sur l'écran d'accueil
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
-firebase.initializeApp({apiKey:"AIzaSyA0DRAyl7nVuF7yxOFSDS0_z1NZoYuXUtI",authDomain:"carte-fidelite-7a6bc.firebaseapp.com",projectId:"carte-fidelite-7a6bc",storageBucket:"carte-fidelite-7a6bc.firebasestorage.app",messagingSenderId:"975448792225",appId:"1:975448792225:web:c64c4f9bac9717677324e0"});
-firebase.messaging();
+// Service worker : réception des notifications push + installation sur l'écran d'accueil
+// Chaque push affiche TOUJOURS une notification (obligatoire sur iPhone, sinon Apple supprime l'abonnement).
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
 self.addEventListener('fetch',()=>{});
+self.addEventListener('push',e=>{
+  let p={};try{p=e.data?e.data.json():{}}catch(x){}
+  const d=p.data||{},n=p.notification||{};
+  e.waitUntil(self.registration.showNotification(d.title||n.title||'Notification',{
+    body:d.body||n.body||'',data:{link:d.link||(p.fcmOptions&&p.fcmOptions.link)||''}}));
+});
+self.addEventListener('notificationclick',e=>{
+  e.notification.close();
+  const u=new URL((e.notification.data&&e.notification.data.link)||self.registration.scope,self.registration.scope).href;
+  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(l=>{
+    for(const c of l){if(c.url==u&&'focus' in c)return c.focus()}
+    return clients.openWindow(u)}));
+});
