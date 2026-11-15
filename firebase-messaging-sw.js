@@ -2,7 +2,11 @@
 // Chaque push affiche TOUJOURS une notification (obligatoire sur iPhone, sinon Apple supprime l'abonnement).
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
-self.addEventListener('fetch',()=>{});
+// Le manifeste Android est généré par la page (logo du dashboard) et stocké dans le cache ; sinon on sert le fichier manifest.json du site
+self.addEventListener('fetch',e=>{
+  if(new URL(e.request.url).pathname.endsWith('/manifest.json'))
+    e.respondWith(caches.open('dyn').then(c=>c.match(e.request.url)).then(r=>r||fetch(e.request)));
+});
 self.addEventListener('push',e=>{
   let p={};try{p=e.data?e.data.json():{}}catch(x){}
   const d=p.data||{},n=p.notification||{};
